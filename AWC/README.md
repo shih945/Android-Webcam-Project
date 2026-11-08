@@ -41,6 +41,7 @@ powershell -NoProfile -ExecutionPolicy Bypass -File .\package-awc.ps1
 - 输出：`dist\AWC-Client-<版本>\` 和 `dist\AWC-Client-<版本>.zip`
 - `package-awc.ps1` 开头是配置块：Rust 工具链、MinGW、libclang、FFmpeg、cargo 镜像都在那里；
 - AWC 源码、`.tools`、`dist` 都相对脚本解析，整个项目迁移后只需按新机器修改开头的外部路径；
+- 本机的外部 SDK/工具放在 `D:\app`：`jdk-21`、`gradle-9.6.1`、`android-sdk`、`ffmpeg81`、`clang-include`；`cargo-home`、`gradle-home` 等用户/编译缓存仍放在项目 `.tools`；
 - 脚本会读取版本号、复制 `awc.exe`、`softcam.dll`、FFmpeg DLL、`adb\`、`LICENSE`，并生成客户端 `README.txt`；
 - 最后输出 zip 的 SHA256。
 
@@ -55,8 +56,8 @@ $env:PATH = "$toolchain;D:\app\mingw64\bin;" + $env:PATH
 $env:CC = 'gcc'
 $env:AR = 'ar'
 $env:LIBCLANG_PATH = 'D:\app\Huawei\sdk\23\native\llvm\bin'
-$env:BINDGEN_EXTRA_CLANG_ARGS = '-ID:/desktop/Android-Webcam-Project/.tools/clang-include -ID:/app/mingw64/x86_64-w64-mingw32/include --target=x86_64-w64-windows-gnu'
-$env:FFMPEG_DIR = 'D:\desktop\Android-Webcam-Project\.tools\ffmpeg81\ffmpeg-n8.1-latest-win64-gpl-shared-8.1'
+$env:BINDGEN_EXTRA_CLANG_ARGS = '-ID:/app/clang-include -ID:/app/mingw64/x86_64-w64-mingw32/include --target=x86_64-w64-windows-gnu'
+$env:FFMPEG_DIR = 'D:\app\ffmpeg81\ffmpeg-n8.1-latest-win64-gpl-shared-8.1'
 $env:CARGO_TARGET_DIR = 'D:\desktop\Android-Webcam-Project\.tools\target-awc'
 
 cargo build --target x86_64-pc-windows-gnu
