@@ -19,6 +19,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.json.Json
 import java.io.OutputStream
+import java.net.InetSocketAddress
+import java.net.ServerSocket
 
 object VideoStreamServer {
 
@@ -81,17 +83,32 @@ object VideoStreamServer {
     val isRunning: Boolean
         get() = server != null
 
-    fun toggleServer(port: Int = 8080) {
+    fun toggleServer(port: Int = 8080): Boolean {
         if (isRunning) {
             stop()
-        } else {
-            start(port)
+            onServerStateChanged?.invoke(false)
+            return true
         }
+        val started = start(port)
         onServerStateChanged?.invoke(isRunning)
+        return started
     }
 
-    fun start(port: Int = 8080) {
-        if (server != null) return
+    fun start(port: Int = 8080): Boolean {
+        if (server != null) return true
+
+        // Ktor's CIO connector binds asynchronously; an occupied port otherwise
+        // kills the process with an uncaught BindException. Probe first and
+        // report the failure to the caller.
+        try {
+            ServerSocket().use { probe ->
+                probe.reuseAddress = true
+                probe.bind(InetSocketAddress(port))
+            }
+        } catch (e: Exception) {
+            Log.e("AWA", "Cannot bind port $port", e)
+            return false
+        }
 
         server = embeddedServer(CIO, port = port) {
             install(ContentNegotiation) {
@@ -206,6 +223,7 @@ object VideoStreamServer {
 
             }
         }.start(wait = false)
+        return true
     }
 
     private suspend fun streamMjpeg(outputStream: OutputStream) {

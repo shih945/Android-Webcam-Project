@@ -11,7 +11,9 @@ import android.os.Looper
 import android.util.Log
 import android.util.Size
 import android.view.MotionEvent
+import android.view.Surface
 import android.view.View
+import android.widget.Toast
 import androidx.camera.camera2.interop.Camera2CameraControl
 import androidx.camera.camera2.interop.Camera2CameraInfo
 import androidx.camera.camera2.interop.CaptureRequestOptions
@@ -235,7 +237,13 @@ class CameraViewModel : ViewModel() {
             }
         }
 
-        VideoStreamServer.start(8080)
+        if (!VideoStreamServer.start(8080)) {
+            Toast.makeText(
+                context,
+                "Port 8080 is already in use. Stop the other AWA instance first.",
+                Toast.LENGTH_LONG
+            ).show()
+        }
     }
 
     // --- Unified start/stop ---
@@ -244,6 +252,17 @@ class CameraViewModel : ViewModel() {
             stopActiveStream()
             _isServerRunning.value = false
         } else {
+            if (!VideoStreamServer.start(8080)) {
+                _isServerRunning.value = false
+                appContext?.let { ctx ->
+                    Toast.makeText(
+                        ctx,
+                        "Port 8080 is already in use. Stop the other AWA instance first.",
+                        Toast.LENGTH_LONG
+                    ).show()
+                }
+                return
+            }
             startActiveStream()
             _isServerRunning.value = true
         }
@@ -448,15 +467,20 @@ class CameraViewModel : ViewModel() {
         providerFuture.addListener({
             val provider = providerFuture.get()
             cameraProvider = provider
+            val targetRotation = preview.display?.rotation ?: Surface.ROTATION_0
 
-            val previewUseCase = Preview.Builder().build().also {
-                it.setSurfaceProvider(preview.surfaceProvider)
-            }
+            val previewUseCase = Preview.Builder()
+                .setTargetRotation(targetRotation)
+                .build()
+                .also {
+                    it.setSurfaceProvider(preview.surfaceProvider)
+                }
 
             val executor = cameraExecutor ?: Executors.newSingleThreadExecutor().also { cameraExecutor = it }
 
             val imageAnalysis = ImageAnalysis.Builder()
                 .setBackpressureStrategy(ImageAnalysis.STRATEGY_KEEP_ONLY_LATEST)
+                .setTargetRotation(targetRotation)
                 .setResolutionSelector(
                     ResolutionSelector.Builder()
                         .setAspectRatioStrategy(
