@@ -5,12 +5,12 @@
 //! can be exercised without a device.  The pattern contains colour bars, a
 //! moving box, a scan line and a binary frame counter.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::Arc;
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use super::frame::DecodedFrame;
+use super::frame::{DecodedFrame, Rotation};
 use super::preview::PreviewTap;
 use super::sink::VirtualCamSink;
 use super::source::StreamStats;
@@ -43,6 +43,8 @@ impl TestPatternSource {
         sink: Arc<dyn VirtualCamSink>,
         preview: Arc<PreviewTap>,
         stats: Arc<StreamStats>,
+        rotation: Arc<AtomicU16>,
+        mirror: Arc<AtomicBool>,
     ) -> Self {
         let running = Arc::new(AtomicBool::new(true));
         let flag = Arc::clone(&running);
@@ -71,6 +73,15 @@ impl TestPatternSource {
                         stats
                             .last_pts_micros
                             .store(pts.as_micros() as u64, Ordering::Relaxed);
+                        let frame = Rotation::from_degrees(
+                            rotation.load(Ordering::Relaxed),
+                        )
+                        .apply(frame);
+                        let frame = if mirror.load(Ordering::Relaxed) {
+                            DecodedFrame::flip_horizontal(frame)
+                        } else {
+                            frame
+                        };
                         preview.maybe_tap(&frame);
                         sink.push_frame(frame);
                     }

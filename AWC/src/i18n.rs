@@ -121,6 +121,8 @@ pub fn tr(lang: Lang, key: &'static str) -> &'static str {
         "Exposure range: {} – {}" => "曝光范围：{} – {}",
         "{:.1} fps stream · {:.1} fps output" => "输入 {:.1} fps · 输出 {:.1} fps",
         "Preview" => "预览",
+        "Rotation" => "旋转",
+        "Mirror" => "左右翻转",
         "Preview off" => "预览已关闭",
         "Turn on Preview above." => "请在上方打开预览。",
         "No signal" => "无信号",

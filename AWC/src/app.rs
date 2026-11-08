@@ -644,6 +644,54 @@ impl AwcApp {
         } else {
             i18n::tr(lang, "Start test pattern")
         };
+
+        ui.label(
+            RichText::new(i18n::tr(
+                lang,
+                "Local colour bars; feeds the same preview + virtual-camera path.",
+            ))
+            .small()
+            .color(p.muted),
+        );
+
+        ui.add_enabled_ui(!running, |ui| {
+            let current = test_label(self.test_width, self.test_height, lang);
+            egui::ComboBox::from_id_salt("test_res")
+                .selected_text(current)
+                .width(ui.available_width())
+                .show_ui(ui, |ui| {
+                    for (label, width, height) in TEST_PRESETS {
+                        if ui.selectable_label(current == *label, *label).clicked() {
+                            self.test_width = *width;
+                            self.test_height = *height;
+                        }
+                    }
+                });
+
+            ui.add_space(6.0);
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(i18n::tr(lang, "FPS")).small().color(p.muted));
+                let fps = format!("{} fps", self.test_fps);
+                egui::ComboBox::from_id_salt("test_fps")
+                    .selected_text(fps)
+                    .width(110.0)
+                    .show_ui(ui, |ui| {
+                        for value in [30u32, 60] {
+                            if ui
+                                .selectable_label(
+                                    self.test_fps == value,
+                                    format!("{value} fps"),
+                                )
+                                .clicked()
+                            {
+                                self.test_fps = value;
+                            }
+                        }
+                    });
+            });
+        });
+
+        ui.add_space(8.0);
         let button = Button::new(label)
             .variant(if running {
                 ButtonVariant::Destructive
@@ -651,7 +699,10 @@ impl AwcApp {
                 ButtonVariant::Outline
             })
             .expanded(true);
-        if ui.add(button).clicked() {
+        if ui
+            .add_sized([ui.available_width(), 32.0], button)
+            .clicked()
+        {
             if running {
                 actions.push(Command::StopTestPattern);
             } else {
@@ -666,47 +717,6 @@ impl AwcApp {
                 });
             }
         }
-
-        ui.label(
-            RichText::new(i18n::tr(
-                lang,
-                "Local colour bars; feeds the same preview + virtual-camera path.",
-            ))
-            .small()
-            .color(p.muted),
-        );
-
-        ui.add_enabled_ui(!running, |ui| {
-            ui.horizontal(|ui| {
-                let current = test_label(self.test_width, self.test_height, lang);
-                egui::ComboBox::from_id_salt("test_res")
-                    .selected_text(current)
-                    .width(200.0)
-                    .show_ui(ui, |ui| {
-                        for (label, width, height) in TEST_PRESETS {
-                            if ui.selectable_label(current == *label, *label).clicked() {
-                                self.test_width = *width;
-                                self.test_height = *height;
-                            }
-                        }
-                    });
-
-                let fps = format!("{} fps", self.test_fps);
-                egui::ComboBox::from_id_salt("test_fps")
-                    .selected_text(fps)
-                    .width(90.0)
-                    .show_ui(ui, |ui| {
-                        for value in [30u32, 60] {
-                            if ui
-                                .selectable_label(self.test_fps == value, format!("{value} fps"))
-                                .clicked()
-                            {
-                                self.test_fps = value;
-                            }
-                        }
-                    });
-            });
-        });
 
         if running {
             ui.horizontal(|ui| {
@@ -958,7 +968,7 @@ impl AwcApp {
 
         ui.horizontal(|ui| {
             if ui.button(i18n::tr(lang, "Switch camera")).clicked() {
-                actions.push(Command::Control("switch_camera=true".to_string()));
+                actions.push(Command::SwitchCamera);
             }
             if features.manual_focus {
                 ui.label(
@@ -1018,6 +1028,50 @@ impl AwcApp {
                             .small()
                             .color(self.palette.muted),
                         );
+
+                        ui.add_space(8.0);
+                        let mut rotation = self.state.rotation.load(Ordering::Relaxed);
+                        ui.label(
+                            RichText::new(i18n::tr(lang, "Rotation"))
+                                .small()
+                                .color(self.palette.muted),
+                        );
+                        ui.scope(|ui| {
+                            ui.spacing_mut().interact_size.y = 22.0;
+                            ui.spacing_mut().button_padding = egui::vec2(6.0, 2.0);
+                            egui::ComboBox::from_id_salt("rotation")
+                                .selected_text(
+                                    RichText::new(format!("{rotation}°")).small(),
+                                )
+                                .width(58.0)
+                                .show_ui(ui, |ui| {
+                                    for value in [0u16, 90, 180, 270] {
+                                        ui.selectable_value(
+                                            &mut rotation,
+                                            value,
+                                            format!("{value}°"),
+                                        );
+                                    }
+                                });
+                        });
+                        if rotation != self.state.rotation.load(Ordering::Relaxed) {
+                            self.config.rotation = rotation;
+                            let _ = self.config.save();
+                            actions.push(Command::SetRotation(rotation));
+                        }
+
+                        ui.add_space(8.0);
+                        let mut mirror = self.state.mirror.load(Ordering::Relaxed);
+                        ui.label(
+                            RichText::new(i18n::tr(lang, "Mirror"))
+                                .small()
+                                .color(self.palette.muted),
+                        );
+                        if ui.add(Switch::new(&mut mirror)).changed() {
+                            self.config.mirror = mirror;
+                            let _ = self.config.save();
+                            actions.push(Command::SetMirror(mirror));
+                        }
 
                         ui.with_layout(
                             egui::Layout::right_to_left(egui::Align::Center),

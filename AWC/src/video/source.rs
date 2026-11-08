@@ -7,7 +7,7 @@
 
 use std::io::Read;
 use std::ptr;
-use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, AtomicU16, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
@@ -16,7 +16,7 @@ use ffmpeg_next as ff;
 use ffmpeg_sys_next as ffi;
 use zune_jpeg::JpegDecoder;
 
-use super::frame::DecodedFrame;
+use super::frame::{DecodedFrame, Rotation};
 use super::preview::PreviewTap;
 use super::sink::VirtualCamSink;
 
@@ -60,6 +60,8 @@ impl StreamReceiver {
         sink: Arc<dyn VirtualCamSink>,
         preview: Arc<PreviewTap>,
         stats: Arc<StreamStats>,
+        rotation: Arc<AtomicU16>,
+        mirror: Arc<AtomicBool>,
     ) -> Self {
         let running = Arc::new(AtomicBool::new(true));
         let flag = Arc::clone(&running);
@@ -70,10 +72,10 @@ impl StreamReceiver {
             .spawn(move || {
                 match request.kind {
                     SourceKind::Mjpeg => {
-                        run_mjpeg(&request, sink, preview, stats, flag);
+                        run_mjpeg(&request, sink, preview, stats, rotation, mirror, flag);
                     }
                     SourceKind::Rtsp => {
-                        run_rtsp(&request, sink, preview, stats, flag);
+                        run_rtsp(&request, sink, preview, stats, rotation, mirror, flag);
                     }
                 }
             })
@@ -103,6 +105,8 @@ fn run_mjpeg(
     sink: Arc<dyn VirtualCamSink>,
     preview: Arc<PreviewTap>,
     stats: Arc<StreamStats>,
+    rotation: Arc<AtomicU16>,
+    mirror: Arc<AtomicBool>,
     running: Arc<AtomicBool>,
 ) {
     let client = match reqwest::blocking::Client::builder()
@@ -160,6 +164,7 @@ fn run_mjpeg(
                         stats
                             .last_pts_micros
                             .store(pts.as_micros() as u64, Ordering::Relaxed);
+                        let frame = rotate_frame(frame, &rotation, &mirror);
                         preview.maybe_tap(&frame);
                         sink.push_frame(frame);
                     } else {
@@ -180,8 +185,20 @@ fn run_mjpeg(
     }
 }
 
-fn sleep_unless_stopped(running: &AtomicBool, duration: Duration) {
-    let step = Duration::from_millis(50);
+fn rotate_frame(
+    frame: DecodedFrame,
+    rotation: &AtomicU16,
+    mirror: &AtomicBool,
+) -> DecodedFrame {
+    let frame = Rotation::from_degrees(rotation.load(Ordering::Relaxed)).apply(frame);
+    if mirror.load(Ordering::Relaxed) {
+        DecodedFrame::flip_horizontal(frame)
+    } else {
+        frame
+    }
+}
+
+fn sleep_unless_stopped(running: &AtomicBool, duration: Duration) {    let step = Duration::from_millis(50);
     let mut left = duration;
     while left > Duration::ZERO && running.load(Ordering::Acquire) {
         let s = if left > step { step } else { left };
@@ -424,6 +441,8 @@ fn run_rtsp(
     sink: Arc<dyn VirtualCamSink>,
     preview: Arc<PreviewTap>,
     stats: Arc<StreamStats>,
+    rotation: Arc<AtomicU16>,
+    mirror: Arc<AtomicBool>,
     running: Arc<AtomicBool>,
 ) {
     if let Err(err) = ff::init() {
@@ -563,6 +582,7 @@ fn run_rtsp(
                     stats
                         .last_pts_micros
                         .store(pts.as_micros() as u64, Ordering::Relaxed);
+                    let frame = rotate_frame(frame, &rotation, &mirror);
                     preview.maybe_tap(&frame);
                     sink.push_frame(frame);
                 }

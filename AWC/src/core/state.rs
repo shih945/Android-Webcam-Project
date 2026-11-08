@@ -4,7 +4,7 @@
 //! sees a decoded frame.
 
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU16, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
@@ -100,6 +100,8 @@ pub struct SharedState {
     pub stream: Arc<StreamStats>,
     pub preview: Arc<PreviewTap>,
     pub sink: Arc<SoftcamSink>,
+    pub rotation: Arc<AtomicU16>,
+    pub mirror: Arc<AtomicBool>,
     pub registered: AtomicBool,
     pub test_running: AtomicBool,
 }
@@ -117,6 +119,8 @@ impl SharedState {
             stream: Arc::new(StreamStats::default()),
             preview: Arc::new(PreviewTap::new(preview)),
             sink,
+            rotation: Arc::new(AtomicU16::new(0)),
+            mirror: Arc::new(AtomicBool::new(false)),
             registered: AtomicBool::new(false),
             test_running: AtomicBool::new(false),
         })

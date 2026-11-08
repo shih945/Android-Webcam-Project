@@ -38,9 +38,11 @@ pub enum Command {
     },
     StopTestPattern,
     SetResolution(String),
+    SwitchCamera,
+    SetRotation(u16),
+    SetMirror(bool),
     RefreshDevices,
     ConnectDevice(String),
-    Control(String),
     RunSetup,
     UpdatePreview(PreviewConfig),
     Shutdown,
@@ -55,6 +57,8 @@ pub struct ControllerHandle {
 impl ControllerHandle {
     pub fn spawn_with_config(config: crate::core::config::Config) -> Self {
         let state = SharedState::new(config.preview());
+        state.rotation.store(config.rotation, Ordering::Relaxed);
+        state.mirror.store(config.mirror, Ordering::Relaxed);
         let (tx, rx) = mpsc::channel();
         let controller_state = Arc::clone(&state);
         let join = thread::Builder::new()
@@ -177,6 +181,8 @@ fn controller_loop(rx: Receiver<Command>, state: Arc<SharedState>) {
                             sink_trait.clone(),
                             Arc::clone(&preview),
                             Arc::clone(&stream),
+                            Arc::clone(&state.rotation),
+                            Arc::clone(&state.mirror),
                         ));
                     }
                     Err(err) => {
@@ -231,6 +237,8 @@ fn controller_loop(rx: Receiver<Command>, state: Arc<SharedState>) {
                     Arc::clone(&sink_trait),
                     Arc::clone(&preview),
                     Arc::clone(&stream),
+                    Arc::clone(&state.rotation),
+                    Arc::clone(&state.mirror),
                 ));
                 state.test_running.store(true, Ordering::Relaxed);
             }
@@ -246,10 +254,16 @@ fn controller_loop(rx: Receiver<Command>, state: Arc<SharedState>) {
                     state.warn("Pick a resolution after connecting");
                     continue;
                 };
-                let query = format!(
+                let mut query = format!(
                     "resolution_str={}",
                     resolution.replace(' ', "%20")
                 );
+                // The Android endpoint defaults an omitted camera to "back".
+                // Preserve the current facing while changing resolution.
+                if let Ok(current) = phone::fetch_settings(host, *port) {
+                    query.push_str("&camera=");
+                    query.push_str(&current.camera);
+                }
                 match phone::send_control(host, *port, &query) {
                     Ok(()) => {
                         *state.selected_resolution.lock().unwrap() = Some(resolution.clone());
@@ -257,6 +271,49 @@ fn controller_loop(rx: Receiver<Command>, state: Arc<SharedState>) {
                     }
                     Err(err) => state.error(format!("Resolution change failed: {err}")),
                 }
+            }
+
+            Command::SwitchCamera => {
+                let Some((host, port)) = active_host.as_ref() else {
+                    state.warn("Connect to the phone first");
+                    continue;
+                };
+                let current = match phone::fetch_settings(host, *port) {
+                    Ok(settings) => settings,
+                    Err(err) => {
+                        state.error(format!("Camera switch failed: {err}"));
+                        continue;
+                    }
+                };
+                let target = if current.camera.eq_ignore_ascii_case("front") {
+                    "back"
+                } else {
+                    "front"
+                };
+                let query = format!("camera={target}");
+                match phone::send_control(host, *port, &query) {
+                    Ok(()) => state.info(format!("Camera: {target}")),
+                    Err(err) => state.error(format!("Camera switch failed: {err}")),
+                }
+            }
+
+            Command::SetRotation(degrees) => {
+                let degrees = match degrees {
+                    90 => 90,
+                    180 => 180,
+                    270 => 270,
+                    _ => 0,
+                };
+                state.rotation.store(degrees, Ordering::Relaxed);
+                state.info(format!("Rotation: {degrees}°"));
+            }
+
+            Command::SetMirror(enabled) => {
+                state.mirror.store(enabled, Ordering::Relaxed);
+                state.info(format!(
+                    "Mirror: {}",
+                    if enabled { "on" } else { "off" }
+                ));
             }
 
             Command::RefreshDevices => {
@@ -278,17 +335,6 @@ fn controller_loop(rx: Receiver<Command>, state: Arc<SharedState>) {
                         state.info(format!("ADB: forwarded 8080/8554 for {device_id}"));
                     }
                     Err(err) => state.error(format!("ADB forward failed: {err}")),
-                }
-            }
-
-            Command::Control(query) => {
-                let Some((host, port)) = active_host.as_ref() else {
-                    state.warn("Connect to the phone first");
-                    continue;
-                };
-                match phone::send_control(host, *port, &query) {
-                    Ok(()) => state.info(format!("Phone control: {query}")),
-                    Err(err) => state.error(format!("Phone control failed: {err}")),
                 }
             }
 

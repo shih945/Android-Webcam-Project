@@ -93,6 +93,33 @@ pub fn is_rtsp(features: &Features) -> bool {
     protocol.contains("RTSP") || protocol.contains("H264")
 }
 
+#[derive(Clone, Debug)]
+pub struct RemoteSettings {
+    pub camera: String,
+}
+
+/// Current camera-facing and resolution reported by `/settings`.
+pub fn fetch_settings(host: &str, port: u16) -> Result<RemoteSettings, String> {
+    let url = format!("http://{host}:{port}/settings");
+    let response = client()?
+        .get(&url)
+        .send()
+        .map_err(|e| format!("GET {url}: {e}"))?;
+    if !response.status().is_success() {
+        return Err(format!("GET {url}: HTTP {}", response.status()));
+    }
+    let value: Value = response
+        .json()
+        .map_err(|e| format!("GET {url}: invalid JSON: {e}"))?;
+    Ok(RemoteSettings {
+        camera: value
+            .get("camera")
+            .and_then(Value::as_str)
+            .unwrap_or("back")
+            .to_string(),
+    })
+}
+
 pub fn send_control(host: &str, port: u16, query: &str) -> Result<(), String> {
     let url = format!("http://{host}:{port}/control?{query}");
     let response = client()?
