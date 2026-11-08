@@ -16,15 +16,15 @@ android {
         applicationId = "com.soubhagyajit.awa"
         minSdk = 26
         targetSdk = 37
-        versionCode = 7
-        versionName = "1.0.3.3"
+        versionCode = 8
+        versionName = "1.0.4"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildTypes {
         release {
-            isMinifyEnabled = false
+            isMinifyEnabled = true
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro"
