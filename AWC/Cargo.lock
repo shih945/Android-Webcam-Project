@@ -114,6 +114,7 @@ dependencies = [
  "serde",
  "serde_json",
  "shadcn-egui",
+ "windows-sys 0.61.2",
  "zune-jpeg 0.4.21",
 ]
 

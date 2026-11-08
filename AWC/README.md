@@ -23,6 +23,26 @@
 - **控制面**：ADB 设备 / Wi-Fi、`/features` 探测、分辨率切换、前后摄像头切换、虚拟摄像头启停、Setup（`regsvr32`，注册方式未改）
 - **不经过 UI**：解码后的 BGR 帧只存在于视频模块；egui 只拿到 `PreviewFrame`（RGBA）和原子计数
 
+## 打包客户端
+
+项目根目录提供两个入口：
+
+```powershell
+# 推荐：绕过 PowerShell 执行策略
+.\package-awc.cmd
+
+# 或直接运行脚本
+powershell -NoProfile -ExecutionPolicy Bypass -File .\package-awc.ps1
+```
+
+- 只编译不打包：`.\package-awc.cmd -SkipBuild`
+- 只生成目录不生成 zip：`.\package-awc.cmd -NoZip`
+- 输出：`dist\AWC-Client-<版本>\` 和 `dist\AWC-Client-<版本>.zip`
+- `package-awc.ps1` 开头是配置块：Rust 工具链、MinGW、libclang、FFmpeg、cargo 镜像都在那里；
+- AWC 源码、`.tools`、`dist` 都相对脚本解析，整个项目迁移后只需按新机器修改开头的外部路径；
+- 脚本会读取版本号、复制 `awc.exe`、`softcam.dll`、FFmpeg DLL、`adb\`、`LICENSE`，并生成客户端 `README.txt`；
+- 最后输出 zip 的 SHA256。
+
 ## 构建（本机）
 
 本机没有 MSVC，使用 `D:\app` 下的 GNU 工具链、MinGW、FFmpeg 8.1 和 cargo 镜像。
@@ -83,6 +103,14 @@ cargo test --target x86_64-pc-windows-gnu
 - 点 **Start virtual camera**：`Output` 出现 `1280×720`，`Sent` 持续增长；Zoom/Teams/OBS 应能枚举到 `AWC Virtual Cam`。
 - 切换测试源分辨率后重启测试源：sink 会自动重建摄像头，不需要手动重启虚拟摄像头。
 
+## 国际化
+
+- 支持 English / 简体中文；首次启动跟随 Windows 显示语言。
+- 顶栏右侧语言下拉可即时切换，写入 `%APPDATA%\AWC\config.json` 的 `language`。
+- `AWC_LANG=en|zh|system` 可在启动时覆盖语言。
+- 中文界面会自动从 Windows 字体目录加载 Microsoft YaHei / SimHei 作为 CJK fallback。
+- 核心层日志仍保留英文技术原文，UI 标签、按钮、状态、预览说明已翻译。
+
 ## 布局
 
 - 页面四周 **16 logical** padding；顶栏、侧栏、主区之间有明确 gutter；
@@ -92,6 +120,10 @@ cargo test --target x86_64-pc-windows-gnu
 - 日志默认收起，顶部 `Log` 打开。
 
 ## 主题
+
+- 默认跟随系统；顶部下拉可切 `System / Light / Dark`。
+- egui 0.34 在运行时 `ctx.set_theme` 会破坏 shadcn 字体的 glyph atlas（文字变成乱码）。所以 AWC 始终让 egui 停留在 Light 模式，把目标主题的 palette 填进 shadcn 的 `light` slot 来实现明暗切换；字形 atlas 不再变化。
+- `AWC_THEME=light|dark|system` 可在启动时覆盖配置。
 
 - 默认 **System**：跟随 Windows 浅色/深色主题。
 - 顶部右侧下拉框可手动切 **System / Light / Dark**，选择写入 `AWC` 配置。

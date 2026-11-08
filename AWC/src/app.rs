@@ -4,6 +4,7 @@
 //! counters.  Decoded BGR frames stay inside `video::source` / `video::sink`.
 
 use std::sync::atomic::Ordering;
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use eframe::egui::{self, Color32, RichText, TextureOptions};
@@ -12,6 +13,7 @@ use crate::core::config::Config;
 use crate::core::controller::{Command, ControllerHandle, Mode};
 use crate::core::installer;
 use crate::core::state::{ConnState, LogLevel, SharedState, UiSnapshot};
+use crate::i18n::{self, Lang};
 use crate::video::PreviewMode;
 use shadcn_egui::components::badge::{Badge, BadgeVariant};
 use shadcn_egui::components::button::{Button, ButtonSize, ButtonVariant};
@@ -46,8 +48,8 @@ struct Palette {
 }
 
 impl Palette {
-    fn from_visuals(v: &egui::Visuals) -> Self {
-        let light = !v.dark_mode;
+    fn from_visuals(v: &egui::Visuals, dark: bool) -> Self {
+        let light = !dark;
         let (canvas, sidebar, card, border, green, red, amber) = if light {
             (
                 Color32::from_rgb(244, 244, 245),
@@ -74,8 +76,16 @@ impl Palette {
             sidebar,
             card,
             border,
-            text: v.text_color(),
-            muted: v.weak_text_color(),
+            text: if dark {
+                Color32::from_rgb(250, 250, 250)
+            } else {
+                v.text_color()
+            },
+            muted: if dark {
+                Color32::from_rgb(161, 161, 170)
+            } else {
+                v.weak_text_color()
+            },
             green,
             red,
             amber,
@@ -105,6 +115,8 @@ pub struct AwcApp {
     test_fps: u32,
     palette: Palette,
     theme_pref: egui::ThemePreference,
+    dark_ui: bool,
+    lang: Lang,
     preview_mode: PreviewMode,
     sidebar_tab: usize,
 }
@@ -130,6 +142,9 @@ impl AwcApp {
         if let Ok(mode) = std::env::var("AWC_PREVIEW_MODE") {
             config.preview_mode = mode;
         }
+        if let Ok(theme) = std::env::var("AWC_THEME") {
+            config.theme = theme;
+        }
         if let Ok(fps) = std::env::var("AWC_PREVIEW_FPS") {
             if let Ok(fps) = fps.parse::<u32>() {
                 config.preview_fps = fps;
@@ -145,13 +160,23 @@ impl AwcApp {
         let registered = installer::is_registered();
         state.registered.store(registered, Ordering::Relaxed);
 
+        let lang = std::env::var("AWC_LANG")
+            .map(|value| Lang::from_config(&value))
+            .unwrap_or_else(|_| Lang::from_config(&config.language));
         let theme_pref = match config.theme.as_str() {
             "light" => egui::ThemePreference::Light,
             "dark" => egui::ThemePreference::Dark,
             _ => egui::ThemePreference::System,
         };
-        shadcn_egui::Theme::vega().apply(&cc.egui_ctx);
-        cc.egui_ctx.set_theme(theme_pref);
+        let system_dark = system_is_dark(&cc.egui_ctx);
+        let dark_ui = match theme_pref {
+            egui::ThemePreference::Dark => true,
+            egui::ThemePreference::Light => false,
+            egui::ThemePreference::System => system_dark,
+        };
+        let startup_theme = theme_for(dark_ui);
+        startup_theme.apply_with_fonts(&cc.egui_ctx, ui_fonts());
+        cc.egui_ctx.set_theme(egui::ThemePreference::Light);
         cc.egui_ctx.global_style_mut(|style| {
             let mut scroll = egui::style::ScrollStyle::solid();
             scroll.bar_width = 8.0;
@@ -216,8 +241,10 @@ impl AwcApp {
             test_width,
             test_height,
             test_fps,
-            palette: Palette::from_visuals(&egui::Visuals::dark()),
+            palette: Palette::from_visuals(&egui::Visuals::dark(), true),
             theme_pref,
+            dark_ui,
+            lang,
             preview_mode,
             sidebar_tab: 0,
         }
@@ -264,6 +291,7 @@ impl AwcApp {
 
     fn top_bar(&mut self, ui: &mut egui::Ui, snapshot: &UiSnapshot, actions: &mut Vec<Command>) {
         let p = self.palette;
+        let lang = self.lang;
         egui::Panel::top("top")
             .show_separator_line(true)
             .frame(
@@ -286,11 +314,16 @@ impl AwcApp {
                             .color(p.muted),
                     );
                     ui.separator();
-                    let (status, variant) = status_badge(snapshot.conn.state);
+                    let (status, variant) = status_badge(snapshot.conn.state, lang);
                     ui.add(Badge::new(status).variant(variant));
-                    ui.label(RichText::new(snapshot.conn.message.as_str()).color(p.text));
+                    ui.label(RichText::new(i18n::localize_message(lang, &snapshot.conn.message)).color(p.text));
                     if let Some(protocol) = &snapshot.conn.protocol {
-                        ui.add(Badge::new(protocol.as_str()).variant(BadgeVariant::Outline));
+                        let label = if protocol == "TEST" {
+                            i18n::tr(lang, "TEST")
+                        } else {
+                            protocol.as_str()
+                        };
+                        ui.add(Badge::new(label).variant(BadgeVariant::Outline));
                     }
 
                     ui.with_layout(
@@ -299,7 +332,7 @@ impl AwcApp {
                             ui.set_min_width(ui.available_width());
                             if ui
                                 .add(
-                                    Button::new("Setup")
+                                    Button::new(i18n::tr(lang, "Setup"))
                                         .variant(ButtonVariant::Outline)
                                         .size(ButtonSize::Sm),
                                 )
@@ -309,7 +342,7 @@ impl AwcApp {
                             }
                             if ui
                                 .add(
-                                    Button::new("Log")
+                                    Button::new(i18n::tr(lang, "Log"))
                                         .variant(if self.show_log {
                                             ButtonVariant::Default
                                         } else {
@@ -323,7 +356,7 @@ impl AwcApp {
                             }
 
                             let mut pref = self.theme_pref;
-                            let selected = theme_label(pref);
+                            let selected = theme_label(pref, lang);
                             egui::ComboBox::from_id_salt("theme")
                                 .selected_text(selected)
                                 .width(82.0)
@@ -331,30 +364,43 @@ impl AwcApp {
                                     ui.selectable_value(
                                         &mut pref,
                                         egui::ThemePreference::System,
-                                        "System",
+                                        i18n::tr(lang, "System"),
                                     );
                                     ui.selectable_value(
                                         &mut pref,
                                         egui::ThemePreference::Light,
-                                        "Light",
+                                        i18n::tr(lang, "Light"),
                                     );
                                     ui.selectable_value(
                                         &mut pref,
                                         egui::ThemePreference::Dark,
-                                        "Dark",
+                                        i18n::tr(lang, "Dark"),
                                     );
                                 });
                             if pref != self.theme_pref {
-                                self.theme_pref = pref;
-                                self.config.theme = theme_str(pref).to_string();
+                                self.apply_theme(ui.ctx(), pref);
+                            }
+
+                            let mut language = self.lang;
+                            egui::ComboBox::from_id_salt("language")
+                                .selected_text(match language {
+                                    Lang::En => "English",
+                                    Lang::Zh => "中文",
+                                })
+                                .width(82.0)
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(&mut language, Lang::En, "English");
+                                    ui.selectable_value(&mut language, Lang::Zh, "中文");
+                                });
+                            if language != self.lang {
+                                self.lang = language;
+                                self.config.language = self.lang.code().to_string();
                                 let _ = self.config.save();
-                                ui.ctx().set_theme(pref);
-                                self.palette = Palette::from_visuals(ui.visuals());
                             }
 
                             if !snapshot.registered {
                                 ui.add(
-                                    Badge::new("Not registered")
+                                    Badge::new(i18n::tr(lang, "Not registered"))
                                         .variant(BadgeVariant::Destructive),
                                 );
                             }
@@ -367,6 +413,7 @@ impl AwcApp {
 
     fn side_panel(&mut self, ui: &mut egui::Ui, snapshot: &UiSnapshot, actions: &mut Vec<Command>) {
         let panel = self.palette.sidebar;
+        let lang = self.lang;
         egui::Panel::left("controls")
             .show_separator_line(false)
             .resizable(false)
@@ -381,7 +428,13 @@ impl AwcApp {
             )
             .show_inside(ui, |ui| {
                 ui.horizontal(|ui| {
-                    for (index, label) in ["Setup", "Camera", "Phone", "Test"].iter().enumerate() {
+                    let labels = [
+                        i18n::tr(lang, "Setup"),
+                        i18n::tr(lang, "Camera"),
+                        i18n::tr(lang, "Phone"),
+                        i18n::tr(lang, "Test"),
+                    ];
+                    for (index, label) in labels.iter().enumerate() {
                         let active = self.sidebar_tab == index;
                         if ui
                             .add(
@@ -403,25 +456,33 @@ impl AwcApp {
 
                 match self.sidebar_tab {
                     0 => Card::new().size(CardSize::Sm).show(ui, |ui| {
-                        card_header(ui, "Connection", "USB or Wi-Fi");
+                        card_header(ui, i18n::tr(lang, "Connection"), i18n::tr(lang, "USB or Wi-Fi"));
                         card_content(ui, |ui| {
                             self.connection_ui(ui, snapshot, actions);
                         });
                     }),
                     1 => Card::new().size(CardSize::Sm).show(ui, |ui| {
-                        card_header(ui, "Virtual camera", "DirectShow output");
+                        card_header(
+                            ui,
+                            i18n::tr(lang, "Virtual camera"),
+                            i18n::tr(lang, "DirectShow output"),
+                        );
                         card_content(ui, |ui| {
                             self.camera_ui(ui, snapshot, actions);
                         });
                     }),
                     2 => Card::new().size(CardSize::Sm).show(ui, |ui| {
-                        card_header(ui, "Phone", "Camera controls");
+                        card_header(ui, i18n::tr(lang, "Phone"), i18n::tr(lang, "Camera controls"));
                         card_content(ui, |ui| {
                             self.phone_ui(ui, snapshot, actions);
                         });
                     }),
                     _ => Card::new().size(CardSize::Sm).show(ui, |ui| {
-                        card_header(ui, "Test source", "No phone required");
+                        card_header(
+                            ui,
+                            i18n::tr(lang, "Test source"),
+                            i18n::tr(lang, "No phone required"),
+                        );
                         card_content(ui, |ui| {
                             self.test_source_ui(ui, snapshot, actions);
                         });
@@ -437,6 +498,7 @@ impl AwcApp {
         actions: &mut Vec<Command>,
     ) {
         let p = self.palette;
+        let lang = self.lang;
 
         ui.horizontal(|ui| {
             let usb = Button::new("USB")
@@ -463,11 +525,11 @@ impl AwcApp {
 
         match self.mode {
             Mode::Usb => {
-                ui.label(RichText::new("Phone (ADB)").small().color(p.muted));
+                ui.label(RichText::new(i18n::tr(lang, "Phone (ADB)")).small().color(p.muted));
                 let selected = snapshot
                     .selected_device
                     .clone()
-                    .unwrap_or_else(|| "Select a device".to_string());
+                    .unwrap_or_else(|| i18n::tr(lang, "Select a device").to_string());
                 egui::ComboBox::from_id_salt("device_combo")
                     .selected_text(selected)
                     .width(ui.available_width())
@@ -486,7 +548,7 @@ impl AwcApp {
                     });
                 if ui
                     .add(
-                        Button::new("Refresh devices")
+                        Button::new(i18n::tr(lang, "Refresh devices"))
                             .variant(ButtonVariant::Outline)
                             .size(ButtonSize::Sm),
                     )
@@ -496,7 +558,7 @@ impl AwcApp {
                 }
             }
             Mode::Wifi => {
-                ui.label(RichText::new("Phone IP").small().color(p.muted));
+                ui.label(RichText::new(i18n::tr(lang, "Phone IP")).small().color(p.muted));
                 ui.add(
                     Input::new(&mut self.ip)
                         .hint("192.168.1.100")
@@ -515,13 +577,13 @@ impl AwcApp {
         let connecting = snapshot.conn.state == ConnState::Connecting;
         let phone_live = snapshot.conn.state == ConnState::Streaming && !snapshot.test_running;
         let label = if connecting {
-            "Connecting…"
+            i18n::tr(lang, "Connecting…")
         } else if phone_live {
-            "Disconnect"
+            i18n::tr(lang, "Disconnect")
         } else if snapshot.test_running {
-            "Connect phone"
+            i18n::tr(lang, "Connect phone")
         } else {
-            "Connect"
+            i18n::tr(lang, "Connect")
         };
         let button = Button::new(label)
             .variant(if phone_live {
@@ -557,7 +619,11 @@ impl AwcApp {
         let color = state_color(snapshot.conn.state, &p);
         ui.horizontal_wrapped(|ui| {
             status_dot(ui, color);
-            ui.label(RichText::new(snapshot.conn.message.as_str()).small().color(p.muted));
+            ui.label(
+                RichText::new(i18n::localize_message(lang, &snapshot.conn.message))
+                    .small()
+                    .color(p.muted),
+            );
         });
         if let Some(url) = &snapshot.conn.url {
             ui.label(RichText::new(url.as_str()).small().monospace().color(p.muted));
@@ -571,11 +637,12 @@ impl AwcApp {
         actions: &mut Vec<Command>,
     ) {
         let p = self.palette;
+        let lang = self.lang;
         let running = snapshot.test_running;
         let label = if running {
-            "Stop test pattern"
+            i18n::tr(lang, "Stop test pattern")
         } else {
-            "Start test pattern"
+            i18n::tr(lang, "Start test pattern")
         };
         let button = Button::new(label)
             .variant(if running {
@@ -601,14 +668,17 @@ impl AwcApp {
         }
 
         ui.label(
-            RichText::new("Local colour bars; feeds the same preview + virtual-camera path.")
-                .small()
-                .color(p.muted),
+            RichText::new(i18n::tr(
+                lang,
+                "Local colour bars; feeds the same preview + virtual-camera path.",
+            ))
+            .small()
+            .color(p.muted),
         );
 
         ui.add_enabled_ui(!running, |ui| {
             ui.horizontal(|ui| {
-                let current = test_label(self.test_width, self.test_height);
+                let current = test_label(self.test_width, self.test_height, lang);
                 egui::ComboBox::from_id_salt("test_res")
                     .selected_text(current)
                     .width(200.0)
@@ -642,9 +712,11 @@ impl AwcApp {
             ui.horizontal(|ui| {
                 status_dot(ui, p.green);
                 ui.label(
-                    RichText::new(format!(
-                        "Test pattern {}×{} @ {} fps",
-                        self.test_width, self.test_height, self.test_fps
+                    RichText::new(i18n::test_pattern(
+                        lang,
+                        self.test_width,
+                        self.test_height,
+                        self.test_fps,
                     ))
                     .small()
                     .color(p.muted),
@@ -660,11 +732,12 @@ impl AwcApp {
         actions: &mut Vec<Command>,
     ) {
         let p = self.palette;
+        let lang = self.lang;
         let running = snapshot.sink.running;
         let label = if running {
-            "Stop virtual camera"
+            i18n::tr(lang, "Stop virtual camera")
         } else {
-            "Start virtual camera"
+            i18n::tr(lang, "Start virtual camera")
         };
         let button = Button::new(label)
             .variant(if running {
@@ -686,11 +759,11 @@ impl AwcApp {
         }
 
         let consumer = if snapshot.sink.connected {
-            ("In use by an app", p.green)
+            (i18n::tr(lang, "In use by an app"), p.green)
         } else if running {
-            ("Waiting for Zoom / Teams / OBS", p.amber)
+            (i18n::tr(lang, "Waiting for Zoom / Teams / OBS"), p.amber)
         } else {
-            ("Not running", p.muted)
+            (i18n::tr(lang, "Not running"), p.muted)
         };
         ui.horizontal(|ui| {
             status_dot(ui, consumer.1);
@@ -701,33 +774,38 @@ impl AwcApp {
             let resolution = if snapshot.sink.width > 0 {
                 format!("{}×{}", snapshot.sink.width, snapshot.sink.height)
             } else {
-                "waiting for first frame".to_string()
+                i18n::tr(lang, "waiting for first frame").to_string()
             };
             ui.label(
-                RichText::new(format!(
-                    "Output {resolution} · frame #{} · source {:.1}s · output {:.1}s",
+                RichText::new(i18n::output_stats(
+                    lang,
+                    &resolution,
                     snapshot.sink.last_seq,
                     snapshot.stream_pts_ms as f32 / 1000.0,
-                    snapshot.sink.last_pts_ms as f32 / 1000.0
+                    snapshot.sink.last_pts_ms as f32 / 1000.0,
                 ))
                 .small()
                 .color(p.muted),
             );
             ui.horizontal(|ui| {
-                metric(ui, "Sent", snapshot.sink.sent.to_string());
-                metric(ui, "Dropped", snapshot.sink.dropped.to_string());
-                metric(ui, "FPS", format!("{:.1}", self.sink_fps));
+                metric(ui, i18n::tr(lang, "Sent"), snapshot.sink.sent.to_string());
+                metric(
+                    ui,
+                    i18n::tr(lang, "Dropped"),
+                    snapshot.sink.dropped.to_string(),
+                );
+                metric(ui, i18n::tr(lang, "FPS"), format!("{:.1}", self.sink_fps));
             });
         }
 
         ui.label(
-            RichText::new(format!(
-                "{} frames · {} errors · {} reconnects · {:.1} MB in · {} preview taps",
+            RichText::new(i18n::stream_summary(
+                lang,
                 snapshot.stream_frames,
                 snapshot.stream_errors,
                 snapshot.stream_reconnects,
                 snapshot.stream_bytes as f64 / (1024.0 * 1024.0),
-                snapshot.preview_taps
+                snapshot.preview_taps,
             ))
             .small()
             .color(p.muted),
@@ -739,18 +817,28 @@ impl AwcApp {
 
     fn preview_controls_ui(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Command>) {
         let p = self.palette;
+        let lang = self.lang;
         let mut changed = false;
 
         ui.horizontal_wrapped(|ui| {
-            let current_mode = preview_mode_label(self.preview_mode);
+            let current_mode = preview_mode_label(self.preview_mode, lang);
             egui::ComboBox::from_id_salt("preview_mode")
                 .selected_text(current_mode)
                 .width(190.0)
                 .show_ui(ui, |ui| {
                     for (mode, label) in [
-                        (PreviewMode::Throttled, "Throttled (lowest cost)"),
-                        (PreviewMode::FullRate, "Full rate, downscaled"),
-                        (PreviewMode::Native, "Native resolution + rate"),
+                        (
+                            PreviewMode::Throttled,
+                            i18n::tr(lang, "Throttled (lowest cost)"),
+                        ),
+                        (
+                            PreviewMode::FullRate,
+                            i18n::tr(lang, "Full rate, downscaled"),
+                        ),
+                        (
+                            PreviewMode::Native,
+                            i18n::tr(lang, "Native resolution + rate"),
+                        ),
                     ] {
                         if ui
                             .selectable_label(self.preview_mode == mode, label)
@@ -775,7 +863,11 @@ impl AwcApp {
 
             let native = self.preview_mode == PreviewMode::Native;
             ui.add_enabled_ui(!native, |ui| {
-                let current = preview_label(self.config.preview_width, self.config.preview_height);
+                let current = preview_label(
+                    self.config.preview_width,
+                    self.config.preview_height,
+                    lang,
+                );
                 egui::ComboBox::from_id_salt("preview_res")
                     .selected_text(current)
                     .width(170.0)
@@ -799,39 +891,47 @@ impl AwcApp {
 
         let stats = self.state.preview.stats();
         ui.label(
-            RichText::new(format!(
-                "Preview work {:.2} ms/frame (last {:.2} ms) · {} taps · decode thread",
+            RichText::new(i18n::preview_work(
+                lang,
                 stats.average_micros() / 1000.0,
                 stats.last_micros as f64 / 1000.0,
-                stats.taps
+                stats.taps,
             ))
             .small()
             .color(p.muted),
         );
         let hint = match self.preview_mode {
-            PreviewMode::Throttled => {
-                "Downsample + fps cap. Cheapest; the decode thread does little extra work."
-            }
-            PreviewMode::FullRate => {
-                "Downsample every decoded frame. More decode-thread work, no fps cap."
-            }
-            PreviewMode::Native => {
-                "Full resolution every frame. Most expensive; can reduce main-stream fps."
-            }
+            PreviewMode::Throttled => i18n::tr(
+                lang,
+                "Downsample + fps cap. Cheapest; the decode thread does little extra work.",
+            ),
+            PreviewMode::FullRate => i18n::tr(
+                lang,
+                "Downsample every decoded frame. More decode-thread work, no fps cap.",
+            ),
+            PreviewMode::Native => i18n::tr(
+                lang,
+                "Full resolution every frame. Most expensive; can reduce main-stream fps.",
+            ),
         };
         ui.label(RichText::new(hint).small().color(p.muted));
     }
 
     fn phone_ui(&mut self, ui: &mut egui::Ui, snapshot: &UiSnapshot, actions: &mut Vec<Command>) {
         let p = self.palette;
+        let lang = self.lang;
         let features = self.state.features.lock().unwrap().clone();
         let Some(features) = features.as_ref() else {
-            ui.label(RichText::new("Connect to load camera controls.").small().color(p.muted));
+            ui.label(
+                RichText::new(i18n::tr(lang, "Connect to load camera controls."))
+                    .small()
+                    .color(p.muted),
+            );
             return;
         };
 
         ui.label(
-            RichText::new(format!("Protocol: {}", features.stream_protocol))
+            RichText::new(i18n::protocol(lang, &features.stream_protocol))
                 .small()
                 .color(p.muted),
         );
@@ -840,7 +940,7 @@ impl AwcApp {
             let current = snapshot
                 .selected_resolution
                 .clone()
-                .unwrap_or_else(|| "Resolution".to_string());
+                .unwrap_or_else(|| i18n::tr(lang, "Resolution").to_string());
             egui::ComboBox::from_id_salt("resolution")
                 .selected_text(current.clone())
                 .width(ui.available_width())
@@ -857,29 +957,31 @@ impl AwcApp {
         }
 
         ui.horizontal(|ui| {
-            if ui.button("Switch camera").clicked() {
+            if ui.button(i18n::tr(lang, "Switch camera")).clicked() {
                 actions.push(Command::Control("switch_camera=true".to_string()));
             }
             if features.manual_focus {
-                ui.label(RichText::new("Manual focus available").small().color(p.muted));
+                ui.label(
+                    RichText::new(i18n::tr(lang, "Manual focus available"))
+                        .small()
+                        .color(p.muted),
+                );
             }
         });
 
         if features.has_zoom {
             ui.label(
-                RichText::new(format!(
-                    "Zoom range: {:.1}× – {:.1}×",
-                    features.zoom_min, features.zoom_max
-                ))
-                .small()
-                .color(p.muted),
+                RichText::new(i18n::zoom_range(lang, features.zoom_min, features.zoom_max))
+                    .small()
+                    .color(p.muted),
             );
         }
         if features.exposure_upper > features.exposure_lower {
             ui.label(
-                RichText::new(format!(
-                    "Exposure range: {} – {}",
-                    features.exposure_lower, features.exposure_upper
+                RichText::new(i18n::exposure_range(
+                    lang,
+                    features.exposure_lower,
+                    features.exposure_upper,
                 ))
                 .small()
                 .color(p.muted),
@@ -890,6 +992,7 @@ impl AwcApp {
     fn central(&mut self, ui: &mut egui::Ui, actions: &mut Vec<Command>) {
         let bg = self.palette.card;
         let card = self.palette.card;
+        let lang = self.lang;
         egui::CentralPanel::default()
             .frame(egui::Frame::default().fill(bg))
             .show_inside(ui, |ui| {
@@ -903,12 +1006,14 @@ impl AwcApp {
                     })
                     .show(ui, |ui| {
                     ui.horizontal(|ui| {
-                        let (status, variant) = status_badge(self.state.conn.lock().unwrap().state);
+                        let (status, variant) =
+                            status_badge(self.state.conn.lock().unwrap().state, lang);
                         ui.add(Badge::new(status).variant(variant));
                         ui.label(
-                            RichText::new(format!(
-                                "{:.1} fps stream · {:.1} fps output",
-                                self.stream_fps, self.sink_fps
+                            RichText::new(i18n::fps_stream_output(
+                                lang,
+                                self.stream_fps,
+                                self.sink_fps,
                             ))
                             .small()
                             .color(self.palette.muted),
@@ -925,7 +1030,7 @@ impl AwcApp {
                                     actions.push(Command::UpdatePreview(config));
                                 }
                                 ui.label(
-                                    RichText::new("Preview")
+                                    RichText::new(i18n::tr(lang, "Preview"))
                                         .small()
                                         .color(self.palette.muted),
                                 );
@@ -941,14 +1046,18 @@ impl AwcApp {
                     let min_height = (ui.available_height() - 16.0).max(220.0);
                     ui.set_min_height(min_height);
                     if !self.config.preview_enabled {
-                        placeholder(ui, "Preview off", "Turn on Preview above.");
+                        placeholder(
+                            ui,
+                            i18n::tr(lang, "Preview off"),
+                            i18n::tr(lang, "Turn on Preview above."),
+                        );
                         return;
                     }
                     let Some(texture) = &self.preview_texture else {
                         placeholder(
                             ui,
-                            "No signal",
-                            "Connect to the phone and start the stream.",
+                            i18n::tr(lang, "No signal"),
+                            i18n::tr(lang, "Connect to the phone and start the stream."),
                         );
                         return;
                     };
@@ -960,11 +1069,7 @@ impl AwcApp {
                         offset: [0, 3],
                         blur: 16,
                         spread: 2,
-                        color: Color32::from_black_alpha(if ui.visuals().dark_mode {
-                            80
-                        } else {
-                            24
-                        }),
+                        color: Color32::from_black_alpha(if self.dark_ui { 80 } else { 24 }),
                     };
                     ui.painter().add(shadow.as_shape(image_rect, radius));
                     ui.put(
@@ -981,6 +1086,7 @@ impl AwcApp {
             return;
         }
         let p = self.palette;
+        let lang = self.lang;
         egui::Panel::bottom("log")
             .resizable(true)
             .default_size(130.0)
@@ -991,10 +1097,15 @@ impl AwcApp {
             )
             .show_inside(ui, |ui| {
                 ui.horizontal(|ui| {
-                    ui.label(RichText::new("LOG").small().strong().color(p.muted));
+                    ui.label(
+                        RichText::new(i18n::tr(lang, "LOG"))
+                            .small()
+                            .strong()
+                            .color(p.muted),
+                    );
                     if ui
                         .add(
-                            Button::new("Clear")
+                            Button::new(i18n::tr(lang, "Clear"))
                                 .variant(ButtonVariant::Ghost)
                                 .size(ButtonSize::Sm),
                         )
@@ -1003,9 +1114,11 @@ impl AwcApp {
                         self.state.logs.lock().unwrap().clear();
                     }
                     ui.label(
-                        RichText::new(format!(
-                            "{} fps in · {} fps out · {} dropped/s",
-                            self.stream_fps, self.sink_fps, self.dropped_delta
+                        RichText::new(i18n::fps_in_out_dropped(
+                            lang,
+                            self.stream_fps,
+                            self.sink_fps,
+                            self.dropped_delta,
                         ))
                         .small()
                         .color(p.muted),
@@ -1036,12 +1149,26 @@ impl AwcApp {
             });
     }
 
+    fn apply_theme(&mut self, ctx: &egui::Context, pref: egui::ThemePreference) {
+        self.theme_pref = pref;
+        self.config.theme = theme_str(pref).to_string();
+        let _ = self.config.save();
+        self.dark_ui = match pref {
+            egui::ThemePreference::Dark => true,
+            egui::ThemePreference::Light => false,
+            egui::ThemePreference::System => system_is_dark(ctx),
+        };
+        apply_theme_colors(ctx, self.dark_ui);
+        self.palette = Palette::from_visuals(&ctx.global_style().visuals, self.dark_ui);
+        ctx.request_repaint();
+    }
+
 }
 
 impl eframe::App for AwcApp {
     fn ui(&mut self, ui: &mut egui::Ui, _frame: &mut eframe::Frame) {
         let ctx = ui.ctx().clone();
-        self.palette = Palette::from_visuals(ui.visuals());
+        self.palette = Palette::from_visuals(ui.visuals(), self.dark_ui);
         let snapshot = self.state.snapshot();
         self.pump_preview(&ctx);
         self.tick_stats(&snapshot);
@@ -1099,28 +1226,28 @@ fn state_color(state: ConnState, palette: &Palette) -> Color32 {
     }
 }
 
-fn status_badge(state: ConnState) -> (&'static str, BadgeVariant) {
+fn status_badge(state: ConnState, lang: Lang) -> (&'static str, BadgeVariant) {
     match state {
-        ConnState::Idle => ("Idle", BadgeVariant::Secondary),
-        ConnState::Connecting => ("Connecting", BadgeVariant::Outline),
-        ConnState::Streaming => ("Live", BadgeVariant::Default),
-        ConnState::Error => ("Error", BadgeVariant::Destructive),
+        ConnState::Idle => (i18n::tr(lang, "Idle"), BadgeVariant::Secondary),
+        ConnState::Connecting => (i18n::tr(lang, "Connecting"), BadgeVariant::Outline),
+        ConnState::Streaming => (i18n::tr(lang, "Live"), BadgeVariant::Default),
+        ConnState::Error => (i18n::tr(lang, "Error"), BadgeVariant::Destructive),
     }
 }
 
-fn preview_mode_label(mode: PreviewMode) -> &'static str {
+fn preview_mode_label(mode: PreviewMode, lang: Lang) -> &'static str {
     match mode {
-        PreviewMode::Throttled => "Throttled",
-        PreviewMode::FullRate => "Full rate (downscaled)",
-        PreviewMode::Native => "Native (full quality)",
+        PreviewMode::Throttled => i18n::tr(lang, "Throttled"),
+        PreviewMode::FullRate => i18n::tr(lang, "Full rate (downscaled)"),
+        PreviewMode::Native => i18n::tr(lang, "Native (full quality)"),
     }
 }
 
-fn theme_label(pref: egui::ThemePreference) -> &'static str {
+fn theme_label(pref: egui::ThemePreference, lang: Lang) -> &'static str {
     match pref {
-        egui::ThemePreference::System => "System",
-        egui::ThemePreference::Light => "Light",
-        egui::ThemePreference::Dark => "Dark",
+        egui::ThemePreference::System => i18n::tr(lang, "System"),
+        egui::ThemePreference::Light => i18n::tr(lang, "Light"),
+        egui::ThemePreference::Dark => i18n::tr(lang, "Dark"),
     }
 }
 
@@ -1132,20 +1259,68 @@ fn theme_str(pref: egui::ThemePreference) -> &'static str {
     }
 }
 
-fn preview_label(width: u32, height: u32) -> &'static str {
+fn system_is_dark(ctx: &egui::Context) -> bool {
+    ctx.system_theme() == Some(egui::Theme::Dark)
+}
+
+fn theme_for(dark: bool) -> shadcn_egui::Theme {
+    let mut theme = shadcn_egui::Theme::vega();
+    if dark {
+        theme.light = theme.dark.clone();
+    }
+    theme
+}
+
+fn ui_fonts() -> egui::FontDefinitions {
+    let mut fonts = egui::FontDefinitions::default();
+    let candidates = [
+        r"C:\Windows\Fonts\msyh.ttc",
+        r"C:\Windows\Fonts\msyhbd.ttc",
+        r"C:\Windows\Fonts\simhei.ttf",
+        r"C:\Windows\Fonts\Deng.ttf",
+        r"C:\Windows\Fonts\simsun.ttc",
+    ];
+    if let Some(bytes) = candidates.iter().find_map(|path| std::fs::read(path).ok()) {
+        fonts.font_data.insert(
+            "awc-cjk".to_owned(),
+            Arc::new(egui::FontData::from_owned(bytes)),
+        );
+        for family in [
+            egui::FontFamily::Proportional,
+            egui::FontFamily::Monospace,
+        ] {
+            fonts
+                .families
+                .entry(family)
+                .or_default()
+                .push("awc-cjk".to_owned());
+        }
+    }
+    fonts
+}
+
+/// Apply a shadcn theme whose *light* slot contains the requested palette and
+/// keep egui itself in light mode. Switching `ctx.set_theme` at runtime
+/// corrupts the font atlas on egui 0.34, so the mode never changes at runtime.
+fn apply_theme_colors(ctx: &egui::Context, dark: bool) {
+    theme_for(dark).apply(ctx);
+    ctx.set_theme(egui::ThemePreference::Light);
+}
+
+fn preview_label(width: u32, height: u32, lang: Lang) -> &'static str {
     PREVIEW_PRESETS
         .iter()
         .find(|(_, w, h)| *w == width && *h == height)
         .map(|(label, _, _)| *label)
-        .unwrap_or("custom")
+        .unwrap_or_else(|| i18n::tr(lang, "custom"))
 }
 
-fn test_label(width: u32, height: u32) -> &'static str {
+fn test_label(width: u32, height: u32, lang: Lang) -> &'static str {
     TEST_PRESETS
         .iter()
         .find(|(_, w, h)| *w == width && *h == height)
         .map(|(label, _, _)| *label)
-        .unwrap_or("custom")
+        .unwrap_or_else(|| i18n::tr(lang, "custom"))
 }
 
 fn fit_size(available: egui::Vec2, texture: egui::Vec2) -> egui::Vec2 {

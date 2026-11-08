@@ -2,6 +2,7 @@
 
 mod app;
 mod core;
+mod i18n;
 mod video;
 
 fn main() -> eframe::Result {
