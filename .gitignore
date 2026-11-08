@@ -17,6 +17,9 @@ APP
 .vs
 .vscode
 .gitignore
+.tools/
+AWC/target/
+AWC/.cargo/
 avcodec-62.dll
 avdevice-62.dll
 avfilter-11.dll

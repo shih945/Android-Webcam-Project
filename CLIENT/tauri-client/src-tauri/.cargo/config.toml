@@ -1,0 +1,12 @@
+[source.crates-io]
+replace-with = "local-mirror"
+
+[source.local-mirror]
+registry = "sparse+http://127.0.0.1:8765/index/"
+
+[target.x86_64-pc-windows-gnu]
+linker = "D:/app/mingw64/bin/gcc.exe"
+ar = "D:/app/mingw64/bin/ar.exe"
+
+[net]
+offline = false
