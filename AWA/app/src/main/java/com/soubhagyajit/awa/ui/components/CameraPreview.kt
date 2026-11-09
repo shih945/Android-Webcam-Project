@@ -21,7 +21,9 @@ import com.soubhagyajit.awa.viewModel.CameraViewModel
 @Composable
 fun Preview(
     viewModel: CameraViewModel,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onPreviewReady: (() -> Unit)? = null,
+    onPreviewStreaming: (() -> Unit)? = null
 ) {
     val streamMode by viewModel.streamMode
     val context = LocalContext.current
@@ -42,11 +44,17 @@ fun Preview(
                     // stretch bug that affects Android 10/11 (CameraX issue 183864890)
                     implementationMode = PreviewView.ImplementationMode.COMPATIBLE
                     scaleType = PreviewView.ScaleType.FILL_CENTER
+                    previewStreamState.observe(lifecycleOwner) { state ->
+                        if (state == PreviewView.StreamState.STREAMING) {
+                            onPreviewStreaming?.invoke()
+                        }
+                    }
                     viewModel.attachPreviewSurface(
                         context,
                         lifecycleOwner,
                         this
                     )
+                    onPreviewReady?.invoke()
                 }
             },
             update = { view ->

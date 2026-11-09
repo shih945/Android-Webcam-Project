@@ -474,6 +474,23 @@ class CameraViewModel : ViewModel() {
         }
     }
 
+    /** Open the local preview and bind CameraX if needed. */
+    fun startLocalPreview() {
+        if (!_isServerRunning.value) return
+        _showLocalPreview.value = true
+        if (_streamMode.value == StreamMode.MJPEG && mjpegCamera == null) {
+            bindCamera()
+        }
+    }
+
+    /** Hide the local preview; keep a connected client's camera bound. */
+    fun stopLocalPreview() {
+        _showLocalPreview.value = false
+        if (_streamMode.value == StreamMode.MJPEG && viewerCount.get() == 0) {
+            unbindCamera()
+        }
+    }
+
     private fun startPreviewHideTimer() {
         hidePreviewRunnable?.let { mainHandler.removeCallbacks(it) }
         val runnable = Runnable { hideLocalPreview() }

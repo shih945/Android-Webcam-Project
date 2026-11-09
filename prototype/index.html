@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>AWA 取景台 · Framing Desk Prototype</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <svg xmlns="http://www.w3.org/2000/svg" style="display:none" aria-hidden="true">
+    <symbol id="i-power" viewBox="0 0 24 24">
+      <path d="M13 3h-2v10h2V3zm4.83 2.17-1.42 1.42C17.99 7.86 19 9.81 19 12c0 3.87-3.13 7-7 7s-7-3.13-7-7c0-2.19 1.01-4.14 2.59-5.42L6.17 5.17C4.23 6.82 3 9.26 3 12c0 4.97 4.03 9 9 9s9-4.03 9-9c0-2.74-1.23-5.18-3.17-6.83z"/>
+    </symbol>
+    <symbol id="i-settings" viewBox="0 0 24 24">
+      <path d="M19.43 12.98c.04-.32.07-.65.07-.98s-.02-.66-.06-.98l2.11-1.65a.5.5 0 0 0 .12-.64l-2-3.46a.5.5 0 0 0-.61-.22l-2.49 1a7.3 7.3 0 0 0-1.69-.98l-.38-2.65A.49.49 0 0 0 14 2h-4a.49.49 0 0 0-.49.42l-.38 2.65c-.61.25-1.17.58-1.69.98l-2.49-1a.49.49 0 0 0-.61.22l-2 3.46a.49.49 0 0 0 .12.64l2.11 1.65c-.04.32-.07.65-.07.98s.02.66.06.98l-2.11 1.65a.5.5 0 0 0-.12.64l2 3.46c.13.22.39.3.61.22l2.49-1c.52.4 1.08.73 1.69.98l.38 2.65c.04.24.25.42.49.42h4c.24 0 .45-.18.49-.42l.38-2.65c.61-.25 1.17-.58 1.69-.98l2.49 1c.22.08.48 0 .61-.22l2-3.46a.5.5 0 0 0-.12-.64l-2.11-1.65zM12 15.5A3.5 3.5 0 1 1 12 8a3.5 3.5 0 0 1 0 7.5z"/>
+    </symbol>
+    <symbol id="i-camera-switch" viewBox="0 0 24 24">
+      <path d="M20 4h-3.17L15 2H9L7.17 4H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h3.17L9 22h6l1.83-2H20c1.1 0 2-.9 2-2V6c0-1.1-.9-2-2-2zm-8 13c-1.66 0-3-1.34-3-3 0-.35.06-.69.17-1H7.1c-.06.32-.1.66-.1 1 0 2.76 2.24 5 5 5v2l3-3-3-3v2zm3-5c0-2.76-2.24-5-5-5V5L7 8l3 3V9c1.66 0 3 1.34 3 3 0 .35-.06.69-.17 1h2.07c.06-.32.1-.66.1-1z"/>
+    </symbol>
+    <symbol id="i-camera" viewBox="0 0 24 24">
+      <path d="M4 8.5h3l1.5-2h7L17 8.5h3v10H4Z"/>
+      <circle cx="12" cy="13.3" r="3.4"/>
+    </symbol>
+    <symbol id="i-exposure" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="4"/>
+      <path d="M12 2v2.2M12 19.8V22M2 12h2.2M19.8 12H22M4.9 4.9l1.6 1.6M17.5 17.5l1.6 1.6M19.1 4.9l-1.6 1.6M6.5 17.5l-1.6 1.6"/>
+    </symbol>
+    <symbol id="i-zoom" viewBox="0 0 24 24">
+      <circle cx="10.5" cy="10.5" r="6.3"/>
+      <path d="m15.2 15.2 5 5M8 10.5h5M10.5 8v5"/>
+    </symbol>
+    <symbol id="i-focus" viewBox="0 0 24 24">
+      <path d="M4 9V5a1 1 0 0 1 1-1h4M15 4h4a1 1 0 0 1 1 1v4M20 15v4a1 1 0 0 1-1 1h-4M9 20H5a1 1 0 0 1-1-1v-4"/>
+      <circle cx="12" cy="12" r="2.2"/>
+    </symbol>
+    <symbol id="i-flash" viewBox="0 0 24 24">
+      <path d="M13 2 5.5 13H11l-1 9 8-12h-5.5Z"/>
+    </symbol>
+    <symbol id="i-dim" viewBox="0 0 24 24">
+      <path d="M20 14.3A8.2 8.2 0 1 1 9.7 4a6.6 6.6 0 0 0 10.3 10.3Z"/>
+    </symbol>
+    <symbol id="i-eye" viewBox="0 0 24 24">
+      <path d="M2.5 12s3.4-6 9.5-6 9.5 6 9.5 6-3.4 6-9.5 6-9.5-6-9.5-6Z"/>
+      <circle cx="12" cy="12" r="2.8"/>
+    </symbol>
+    <symbol id="i-eye-off" viewBox="0 0 24 24">
+      <path d="m3 3 18 18M10.6 6.2A10.8 10.8 0 0 1 12 6c6.1 0 9.5 6 9.5 6a17 17 0 0 1-3.3 3.8M6.2 7.5A17.7 17.7 0 0 0 2.5 12s3.4 6 9.5 6c1 0 2-.2 2.8-.5"/>
+    </symbol>
+    <symbol id="i-link" viewBox="0 0 24 24">
+      <path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7a5 5 0 0 0 0 10h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4a5 5 0 0 0 0-10z"/>
+    </symbol>
+    <symbol id="i-close" viewBox="0 0 24 24">
+      <path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/>
+    </symbol>
+    <symbol id="i-help" viewBox="0 0 24 24">
+      <circle cx="12" cy="12" r="9"/>
+      <path d="M9.7 9a2.4 2.4 0 1 1 3.4 2.2c-.8.4-1.1 1-1.1 1.8v.4M12 17.2v.1"/>
+    </symbol>
+    <symbol id="i-wifi" viewBox="0 0 24 24">
+      <path d="M3.5 9.2a13.4 13.4 0 0 1 17 0M6.8 12.5a8.7 8.7 0 0 1 10.4 0M10 15.8a4 4 0 0 1 4 0"/>
+      <circle cx="12" cy="19" r="1"/>
+    </symbol>
+    <symbol id="i-usb" viewBox="0 0 24 24">
+      <path d="M12 21V7M12 7 8.5 10.5M12 7l3.5 3.5M12 13l-3-3M12 16l3-3"/>
+      <circle cx="12" cy="4.5" r="2"/>
+    </symbol>
+    <symbol id="i-check" viewBox="0 0 24 24">
+      <path d="m5 12 4.5 4.5L19 7"/>
+    </symbol>
+    <symbol id="i-chevron" viewBox="0 0 24 24">
+      <path d="m9 6 6 6-6 6"/>
+    </symbol>
+    <symbol id="i-monitor" viewBox="0 0 24 24">
+      <rect x="3" y="4" width="18" height="13" rx="2"/>
+      <path d="M8 21h8M12 17v4"/>
+    </symbol>
+    <symbol id="i-lock" viewBox="0 0 24 24">
+      <rect x="5" y="10" width="14" height="11" rx="2"/>
+      <path d="M8 10V7a4 4 0 0 1 8 0v3"/>
+    </symbol>
+    <symbol id="i-bolt" viewBox="0 0 24 24">
+      <path d="M13 2 5.5 13H11l-1 9 8-12h-5.5Z"/>
+    </symbol>
+  </svg>
+
+  <header class="site-header wrap">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true"></span>
+      <span>AWA</span>
+    </div>
+    <nav class="site-nav" aria-label="Prototype sections">
+      <a href="#prototype" data-i18n="nav.prototype">原型</a>
+      <a href="#grips" data-i18n="nav.grips">两种握法</a>
+      <a href="#features" data-i18n="nav.features">功能地图</a>
+    </nav>
+    <div class="language-switch" role="group" aria-label="Language">
+      <button class="lang-button is-active" type="button" data-action="lang" data-lang="zh">中文</button>
+      <button class="lang-button" type="button" data-action="lang" data-lang="en">EN</button>
+    </div>
+  </header>
+
+  <main>
+    <section class="hero wrap" id="prototype">
+      <div class="hero-copy">
+        <h1 data-i18n="hero.title">取景台</h1>
+        <p class="hero-lede" data-i18n="hero.lede">手机端的相机与串流控制台。横竖屏共用一套控制逻辑，空闲时不再是一整屏黑色。</p>
+        <div class="hero-facts">
+          <span class="hero-fact">
+            <svg class="icon" aria-hidden="true"><use href="#i-camera"></use></svg>
+            <span data-i18n="hero.factCamera">MJPEG / RTSP</span>
+          </span>
+          <span class="hero-fact">
+            <svg class="icon" aria-hidden="true"><use href="#i-monitor"></use></svg>
+            <span data-i18n="hero.factDesktop">桌面端直连</span>
+          </span>
+          <span class="hero-fact">
+            <svg class="icon" aria-hidden="true"><use href="#i-lock"></use></svg>
+            <span data-i18n="hero.factLocal">仅局域网</span>
+          </span>
+        </div>
+
+        <div class="state-picker" id="state-picker" role="group" aria-label="Preview state">
+          <button class="state-chip" type="button" data-view="idle"><span class="dot"></span><span data-i18n="states.idle">空闲</span></button>
+          <button class="state-chip" type="button" data-view="waiting"><span class="dot"></span><span data-i18n="states.waiting">等待连接</span></button>
+          <button class="state-chip" type="button" data-view="client"><span class="dot"></span><span data-i18n="states.client">已连接</span></button>
+          <button class="state-chip" type="button" data-view="settings"><span class="dot"></span><span data-i18n="states.settings">设置</span></button>
+          <button class="state-chip" type="button" data-view="exposure"><span class="dot"></span><span data-i18n="states.exposure">曝光</span></button>
+          <button class="state-chip" type="button" data-view="zoom"><span class="dot"></span><span data-i18n="states.zoom">变焦</span></button>
+          <button class="state-chip" type="button" data-view="focus"><span class="dot"></span><span data-i18n="states.focus">对焦</span></button>
+          <button class="state-chip" type="button" data-view="error"><span class="dot"></span><span data-i18n="states.error">端口占用</span></button>
+        </div>
+
+        <div class="state-note">
+          <strong id="state-title">空闲</strong>
+          <span id="state-desc">服务器关闭时，预览区用镜头卡片替代黑屏，并把启动动作放在卡片里。</span>
+        </div>
+      </div>
+
+      <div class="stage">
+        <div class="stage-mat" aria-hidden="true"><span class="corner-b"></span></div>
+        <div class="device device--portrait">
+          <div class="device-screen" id="app-portrait"></div>
+        </div>
+        <span class="stage-caption" data-i18n="hero.caption">实时原型 · 390 × 844</span>
+      </div>
+    </section>
+
+    <section class="section wrap" id="grips">
+      <div class="section-head">
+        <h2 data-i18n="grips.title">两种握法</h2>
+        <p data-i18n="grips.lede">横屏不是把竖屏拉宽。快捷调节移到右手边，设置变成侧板，预览保持最大。</p>
+      </div>
+      <div class="grip">
+        <div class="grip-copy">
+          <h3 data-i18n="grips.headline">横屏把控制放回拇指边。</h3>
+          <p data-i18n="grips.body">竖屏用底部 Dock 承担主操作；横屏把曝光、变焦、对焦、闪光和 DIM 排成右侧竖轨，电源仍在底部中央。</p>
+          <ul class="grip-points">
+            <li>
+              <svg class="icon" aria-hidden="true"><use href="#i-check"></use></svg>
+              <span data-i18n="grips.point1">预览、状态和 IP 仍在同一视线高度。</span>
+            </li>
+            <li>
+              <svg class="icon" aria-hidden="true"><use href="#i-check"></use></svg>
+              <span data-i18n="grips.point2">设置从右侧滑入，不再遮住整块预览。</span>
+            </li>
+            <li>
+              <svg class="icon" aria-hidden="true"><use href="#i-check"></use></svg>
+              <span data-i18n="grips.point3">底部电源、设置、切换摄像头位置不变，横竖屏形成肌肉记忆。</span>
+            </li>
+          </ul>
+        </div>
+        <div class="landscape-stage">
+          <div class="device device--landscape">
+            <div class="device-screen" id="app-landscape"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="section wrap" id="features">
+      <div class="section-head">
+        <h2 data-i18n="features.title">功能地图</h2>
+        <p data-i18n="features.lede">现有功能全部保留，只重新分配入口和信息层级。</p>
+      </div>
+      <div class="feature-table-wrap">
+        <table class="feature-table">
+          <thead>
+            <tr>
+              <th data-i18n="features.colFunction">功能</th>
+              <th data-i18n="features.colPortrait">竖屏入口</th>
+              <th data-i18n="features.colLandscape">横屏入口</th>
+            </tr>
+          </thead>
+          <tbody id="feature-body"></tbody>
+        </table>
+      </div>
+      <div class="design-notes">
+        <div class="note">
+          <h3 data-i18n="notes.oneTitle">空闲不空</h3>
+          <p data-i18n="notes.oneBody">服务器关闭时用浅色镜头卡片替代黑屏，启动动作、协议和隐私范围都在卡片里说清楚。</p>
+        </div>
+        <div class="note">
+          <h3 data-i18n="notes.twoTitle">拇指区优先</h3>
+          <p data-i18n="notes.twoBody">电源固定在底部中央；EXP、ZOOM、FOCUS、FLASH、DIM 组成一条可横滑的调节轨，设置不抢主操作。</p>
+        </div>
+        <div class="note">
+          <h3 data-i18n="notes.threeTitle">一双眼睛</h3>
+          <p data-i18n="notes.threeBody">取景框四角的括号是唯一贯穿全局的视觉记号——品牌、预览、空状态和报错共用它，其他元素保持安静。</p>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="footer wrap">
+    <strong>AWA / Framing Desk</strong>
+    <span data-i18n="footer.note">HTML 设计原型 · 不改动当前 Android 代码</span>
+  </footer>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
